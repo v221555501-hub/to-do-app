@@ -1,0 +1,5 @@
+把本資料夾裡的所有檔案（index.html、manifest.webmanifest、sw.js、三個 icon 圖檔）上傳到任一支援 HTTPS 的靜態網站空間，
+例如 GitHub Pages、Netlify、Cloudflare Pages。上傳後用手機開啟網址：
+- iPhone：Safari → 分享 → 加入主畫面
+- Android：Chrome → 選單 → 安裝應用程式／加到主畫面
+注意：必須是 https 網址，直接用電腦點開 index.html 無法安裝。
