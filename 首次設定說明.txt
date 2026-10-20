@@ -1,0 +1,11 @@
+月計劃工作表｜Google 直接同步 v9
+
+已預先填入 OAuth 用戶端 ID（非密碼）。不需要 Apps Script 或同步密語。
+
+1. 解壓縮後將 ZIP 內所有檔案上傳至 GitHub 儲存庫 to-do-app 根目錄，覆蓋舊檔。
+2. 等 GitHub Pages 部署完成，開啟 https://v221555501-hub.github.io/to-do-app/ 。
+3. 開啟設定，點「登入 Google」，使用已加入測試使用者的帳號授權。
+4. 選擇寫入日曆並按「立即全部同步」，在 Google 日曆確認測試事件。
+
+注意：尚未在真實 Google 帳號驗證。OAuth 測試模式授權可能於 7 天到期。任務儲存於瀏覽器 localStorage，更新前請備份；不要清除網站資料。
+用戶端密碼不可放進網頁。
