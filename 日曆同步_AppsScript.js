@@ -7,6 +7,9 @@
  * 提醒：開始時間當下，以及「提前通知」的時間（天／小時／分鐘，以開始時間為基準）
  * 顏色：紅→紅、黃→黃、綠→綠、藍→藍、紫→紫、灰→灰
  * 已完成或取消的任務，會自動從日曆刪除。
+ *
+ * 另外：App 按「匯入／更新 Google 日曆」時，會讀取你的 Google 帳號「看得到」的所有日曆
+ * （自己的、別人共用給你並已訂閱的），把事件傳回 App 顯示。對方沒共用的日曆讀不到。
  */
 const SECRET = '請改成你自己的密語';   // 必須與 App「⚙ 設定」裡的同步密語一致
 const TZ = 'Asia/Taipei';
@@ -19,6 +22,7 @@ function doPost(e) {
   if (b.a === 'all') (b.tasks || []).forEach(upsert_);
   else if (b.a === 'up') upsert_(b.task);
   else if (b.a === 'del') remove_(b.task.id);
+  else if (b.a === 'events') return json_(events_(b.from, b.to));
   return ContentService.createTextOutput('ok');
 }
 
@@ -57,4 +61,33 @@ function remove_(id) {
   if (!evId) return;
   try { const ev = CalendarApp.getDefaultCalendar().getEventById(evId); if (ev) ev.deleteEvent(); } catch (err) {}
   props.deleteProperty(key);
+}
+
+function json_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** 讀取帳號下所有日曆（含訂閱的他人日曆）在 from～to（yyyy-MM-dd）之間的事件，排除本 App 自己建立的事件。 */
+function events_(from, to) {
+  const start = Utilities.parseDate(from + ' 00:00', TZ, 'yyyy-MM-dd HH:mm');
+  const end = Utilities.parseDate(to + ' 23:59', TZ, 'yyyy-MM-dd HH:mm');
+  const mine = new Set(Object.values(PropertiesService.getScriptProperties().getProperties()));
+  const list = [], out = [];
+  CalendarApp.getAllCalendars().forEach(c => {
+    list.push({ id: c.getId(), name: c.getName(), color: c.getColor() });
+    c.getEvents(start, end).forEach(ev => {
+      if (out.length >= 1500 || mine.has(ev.getId())) return;
+      const allDay = ev.isAllDayEvent();
+      const s = ev.getStartTime();
+      const e = allDay ? new Date(ev.getEndTime().getTime() - 86400000) : ev.getEndTime();
+      out.push({
+        id: c.getId() + '|' + ev.getId(), cal: c.getId(), cn: c.getName(), col: c.getColor(),
+        title: ev.getTitle(),
+        start: Utilities.formatDate(s, TZ, 'yyyy-MM-dd'), sT: allDay ? '' : Utilities.formatDate(s, TZ, 'HH:mm'),
+        due: Utilities.formatDate(e, TZ, 'yyyy-MM-dd'), eT: allDay ? '' : Utilities.formatDate(e, TZ, 'HH:mm'),
+        loc: ev.getLocation(), note: String(ev.getDescription() || '').slice(0, 500)
+      });
+    });
+  });
+  return { cals: list, events: out };
 }
