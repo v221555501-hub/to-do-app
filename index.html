@@ -135,15 +135,15 @@ function applyS(){const r=document.documentElement.style;for(const k in S.c)r.se
  document.querySelector('meta[name=theme-color]').content=h;try{localStorage.setItem('plan.set.v1',JSON.stringify(S))}catch(e){}}
 const hol=d=>S.hol?HOL[d]:'';
 // Google Identity Services OAuth token client; tokens stay in memory only.
-const OAUTH_SCOPE='https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+const OAUTH_SCOPE='https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events.readonly';
 let accessToken='', tokenClient=null, tokenExpiry=0, busy=false;
 const mapKey='plan.google.ids.v1';
 let googleIds=(()=>{try{return JSON.parse(localStorage.getItem(mapKey))||{}}catch(e){return {}}})();
 function storeIds(){localStorage.setItem(mapKey,JSON.stringify(googleIds))}
 function status(x){const el=$('#sy')||$('#sm');if(el)el.textContent=x;else toast(x)}
 function oauthReady(){if(!S.clientId){status('請先填入 Google OAuth 用戶端 ID');return false}if(!window.google?.accounts?.oauth2){status('Google 登入程式尚未載入，請確認網路連線');return false}return true}
-function signIn(){if(!oauthReady())return;try{tokenClient=google.accounts.oauth2.initTokenClient({client_id:S.clientId,scope:OAUTH_SCOPE,callback:async r=>{if(r.error){status('登入失敗：'+r.error);return}accessToken=r.access_token;tokenExpiry=Date.now()+(Number(r.expires_in)||3500)*1000;status('Google 已連線');try{await listCalendars();await pull(true)}catch(e){status('❌ '+e.message)}}});tokenClient.requestAccessToken({prompt:'consent'});}catch(e){status('登入設定有誤：'+e.message)}}
-function signOut(){if(accessToken&&window.google?.accounts?.oauth2)google.accounts.oauth2.revoke(accessToken,()=>{});accessToken='';tokenExpiry=0;status('已登出 Google（本機任務仍保留）')}
+function signIn(){if(!oauthReady())return;try{accessToken='';tokenExpiry=0;S.cals=[];EXT=[];status('請選擇要授權的 Google 帳號');tokenClient=google.accounts.oauth2.initTokenClient({client_id:S.clientId,scope:OAUTH_SCOPE,callback:async r=>{if(r.error){status('登入失敗：'+r.error);return}accessToken=r.access_token;tokenExpiry=Date.now()+(Number(r.expires_in)||3500)*1000;status('Google 已連線');try{await listCalendars();await pull(true)}catch(e){status('❌ '+e.message)}}});tokenClient.requestAccessToken({prompt:'select_account consent'});}catch(e){status('登入設定有誤：'+e.message)}}
+function signOut(){if(accessToken&&window.google?.accounts?.oauth2)google.accounts.oauth2.revoke(accessToken,()=>{});accessToken='';tokenExpiry=0;S.cals=[];EXT=[];S.writeCal='primary';applyS();localStorage.removeItem('plan.ext.v1');render();status('已登出 Google；其他帳號請先加入 OAuth 測試使用者')}
 async function api(path,opt={}){if(!accessToken||Date.now()>tokenExpiry-30000)throw Error('Google 授權已過期，請重新登入');const r=await fetch('https://www.googleapis.com/calendar/v3'+path,{...opt,headers:{Authorization:'Bearer '+accessToken,...(opt.body?{'Content-Type':'application/json'}:{}),...(opt.headers||{})}});if(r.status===204)return {};const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error?.message||('Google API 錯誤 '+r.status));return j}
 const iso=(day,time)=>new Date(day+'T'+(time||'09:00')+':00').toISOString();
 function eventBody(t){const start=new Date(t.start+'T'+(t.sT||'09:00')+':00'),end=new Date(t.due+'T'+(t.eT||'18:00')+':00');if(end<=start)end.setTime(start.getTime()+3600000);const mins=Math.round((Number(t.advN)||0)*({'天':1440,'小時':60,'分鐘':1}[t.advU]||1440));const reminders=[{method:'popup',minutes:0}];if(mins>0&&mins<=40320)reminders.push({method:'popup',minutes:mins});return {summary:t.title,description:[t.folder&&'資料夾：'+t.folder,t.cat&&'分類：'+t.cat,t.contact&&'主要聯繫人：'+t.contact,t.note].filter(Boolean).join('\n'),start:{dateTime:start.toISOString(),timeZone:'Asia/Taipei'},end:{dateTime:end.toISOString(),timeZone:'Asia/Taipei'},reminders:{useDefault:false,overrides:reminders},extendedProperties:{private:{planTaskId:String(t.id)}}}}
@@ -157,7 +157,7 @@ function openSet(){$('#sd').innerHTML=`<b>外觀與同步設定</b><label>配色
 <label><input type="checkbox" id="sh" ${S.hol?'checked':''} style="width:auto;min-height:0"> 顯示國定假日（2026–2027）</label>
 <hr><b>Google 日曆（直接授權）</b><p class="mt">已預先設定 Google OAuth 用戶端 ID，點「登入 Google」即可。Google 要求網站使用 HTTPS 且在 OAuth 設定中登記來源。</p>
 <label>Google OAuth 用戶端 ID<input id="clientid" placeholder="xxxxxxxx.apps.googleusercontent.com" value="${esc(S.clientId||'')}"></label>
-<div class="acts"><button type="button" id="login">🔐 登入 Google</button><button type="button" id="logout">登出</button></div>
+<p class="mt">目前 Google OAuth 測試模式：其他 Gmail 必須先加入 Google Cloud 的「測試使用者」。切換帳號請先登出，再按登入選擇帳號。</p><div class="acts"><button type="button" id="login">🔐 登入／切換 Google</button><button type="button" id="logout">登出</button></div>
 <label>寫入哪個 Google 日曆<select id="writecal"><option value="primary">主要日曆</option>${(S.cals||[]).filter(c=>['owner','writer'].includes(c.accessRole)).map(c=>`<option value="${esc(c.id)}" ${S.writeCal===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label>
 <label><input type="checkbox" id="sx" ${S.ext?'checked':''} style="width:auto;min-height:0"> 顯示 Google 日曆事件（含有權限讀取的共用日曆）</label>
 <div class="acts"><button type="button" id="sp">🔄 讀取 Google 日曆</button></div><p class="mt" id="sm" aria-live="polite"></p>
@@ -227,6 +227,7 @@ $('#fD').oninput=hint;
 function saveTask(skipSync=false){let s=$('#fS').value,d=$('#fD').value,a=$('#fST').value,b=$('#fDT').value;if(`${d}T${b||'00:00'}`<`${s}T${a||'00:00'}`)[s,d,a,b]=[d,s,b,a];
  const p=$('#fP').value,o={title:$('#fT').value.trim(),start:s,due:d,sT:a,eT:b,imp:+$('#fI').value,advN:+$('#fAN').value||0,advU:$('#fAU').value,prog:p==='取消'?p:+p,note:$('#fN').value.trim(),cat:$('#fCat').value.trim(),folder:$('#fFol').value.trim(),contact:$('#fCon').value.trim(),col:curCol};
  const id=editId||'t'+Date.now();if(editId)Object.assign(tasks.find(x=>x.id===id),o);else tasks.push({id,...o});save();if(!skipSync)sync('up',tasks.find(x=>x.id===id));$('#dlg').close();render();return id}
+$('#cc').onclick=()=>$('#dlg').close();
 $('#f').onsubmit=e=>{e.preventDefault();saveTask()};
 $('#fCal').onclick=()=>{if(!$('#f').reportValidity())return;addCal(saveTask(true))};
 const det=t=>[t.folder&&'資料夾：'+t.folder,t.cat&&'分類：'+t.cat,t.contact&&'主要聯繫人：'+t.contact,t.note&&'追蹤進度／內容：\n'+t.note].filter(Boolean).join('\n');
