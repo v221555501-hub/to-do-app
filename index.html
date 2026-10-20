@@ -141,10 +141,25 @@ function openSet(){$('#sd').innerHTML=`<b>外觀與同步設定</b><label>配色
 <label><input type="checkbox" id="sh" ${S.hol?'checked':''} style="width:auto;min-height:0"> 顯示國定假日（2026–2027）</label>
 <label>Google 日曆同步網址（見說明）<input id="su" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(S.url)}"></label>
 <label>同步密語<input id="st" value="${esc(S.tok)}"></label>
-<div class="acts"><button type="button" id="sa">立即全部同步</button><span class="sp mt" id="sy"></span><button class="pri" type="button" id="sc">完成</button></div>`;$('#sdlg').showModal()}
-document.addEventListener('input',e=>{const t=e.target;if(t.dataset.c){S.c[t.dataset.c]=t.value}else if(t.id==='sf')S.ff=t.value;else if(t.id==='ss')S.fs=+t.value;else if(t.id==='sh')S.hol=t.checked;else if(t.id==='su')S.url=t.value.trim();else if(t.id==='st')S.tok=t.value.trim();else return;applyS();render()});
-document.addEventListener('click',e=>{const t=e.target;if(t.dataset.p){S.c={...PRE[t.dataset.p]};applyS();openSet();render()}if(t.id==='sa')sync('all');if(t.id==='sc')$('#sdlg').close()});
-applyS();
+<label><input type="checkbox" id="sx" ${S.ext?'checked':''} style="width:auto;min-height:0"> 顯示 Google 日曆事件（含別人共用給你的日曆）</label>
+<div class="acts"><button type="button" id="sp">🔄 匯入／更新 Google 日曆</button></div><p class="mt" id="sm" style="margin:4px 0 0;overflow-wrap:anywhere"></p>
+${S.cals.map(c=>`<label><input type="checkbox" data-h="${esc(c.id)}" ${S.hid.includes(c.id)?'':'checked'} style="width:auto;min-height:0"> <span style="color:${c.color}">●</span> ${esc(c.name)}</label>`).join('')}
+<div class="acts"><button type="button" id="sa">立即全部同步</button><span class="sp mt" id="sy"></span><button class="pri" type="button" id="sc">完成</button></div>`;if(!$('#sdlg').open)$('#sdlg').showModal()}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.c){S.c[t.dataset.c]=t.value}else if(t.id==='sf')S.ff=t.value;else if(t.id==='ss')S.fs=+t.value;else if(t.id==='sh')S.hol=t.checked;else if(t.id==='su')S.url=t.value.trim();else if(t.id==='st')S.tok=t.value.trim();else if(t.id==='sx')S.ext=t.checked;else if(t.dataset.h)S.hid=t.checked?S.hid.filter(x=>x!==t.dataset.h):[...S.hid,t.dataset.h];else return;applyS();render()});
+document.addEventListener('click',e=>{const t=e.target;if(t.dataset.p){S.c={...PRE[t.dataset.p]};applyS();openSet();render()}if(t.id==='sa')sync('all');if(t.id==='sp')pull(true).then(ok=>{if(ok){const m=$('#sm').textContent;openSet();$('#sm').textContent=m}});if(t.id==='sc')$('#sdlg').close()});
+S.hid??=[];S.ext??=true;S.last??=0;S.cals??=[];
+let EXT=(()=>{try{return JSON.parse(localStorage.getItem('plan.ext.v1'))||[]}catch(e){return[]}})();
+const xe=d=>S.ext?EXT.filter(e=>e.start<=d&&e.due>=d&&!S.hid.includes(e.cal)):[];
+const xi=e=>`<li class="it" data-x="${esc(e.id)}" style="border-left:6px solid ${e.col}"><span class="ic">📆</span><div class="bd"><div class="tt">${esc(e.title)}</div><div class="mt">${e.sT?e.sT+(e.eT?'–'+e.eT:''):'全天'}　${esc(e.cn)}</div></div></li>`;
+async function pull(manual){const say=x=>{if(!manual)return;const e=$('#sm');if(e)e.textContent=x;else toast(x)};
+ if(!S.url){say('請先貼上同步網址與密語');return}
+ say('連線中…');
+ try{let tx;try{tx=await(await fetch(S.url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({a:'events',tok:S.tok,from:add(TODAY,-30),to:add(TODAY,180)})})).text()}
+  catch(e){throw'連不上：請確認網址完整、結尾是 /exec，且部署的「誰可以存取」選「所有人」'}
+  let r;try{r=JSON.parse(tx)}catch(e){throw tx.trim()==='denied'?'密語不一致：請讓 App 與 Apps Script 的 SECRET 完全相同':tx.trim()==='ok'?'Apps Script 還是舊版程式：請「管理部署作業→編輯→新版本」重新部署':'回傳格式不對：常見原因是存取權不是「所有人」、網址不是 /exec，或尚未授權日曆權限'}
+  if(!r.events)throw'回傳內容缺少事件資料：請確認已貼上最新版 Apps Script 並重新部署';
+  EXT=r.events;S.cals=r.cals;S.last=Date.now();try{localStorage.setItem('plan.ext.v1',JSON.stringify(EXT))}catch(e){}applyS();render();say(`✅ 已匯入 ${EXT.length} 筆事件，${r.cals.length} 個日曆`);return 1}
+ catch(e){say('❌ '+(typeof e==='string'?e:'發生錯誤：'+e))}}
 let view='today', wk=0, mo=0, sel=TODAY, flt='all', tasks=load(), editId=null;
 function load(){try{const v=localStorage.getItem(K);if(v)return JSON.parse(v)}catch(e){}return[]}
 function save(){try{localStorage.setItem(K,JSON.stringify(tasks))}catch(e){}}
@@ -161,23 +176,23 @@ const fm=t=>`${md(t.start)}${t.sT?' '+t.sT:''} → ${md(t.due)}${t.eT?' '+t.eT:'
 const FL={all:['全部',()=>1],done:['已完成',t=>t.prog===1],undone:['未完成',t=>!fin(t)],over:['超期任務',over],due:['已到期',due_]};
 const statBar=()=>`<div class="stats">${['done','undone','over','due'].map(k=>`<button class="stat ${flt===k&&view==='list'?'on':''}" data-f="${k}"><b>${tasks.filter(FL[k][1]).length}</b><span>${FL[k][0]}</span></button>`).join('')}</div>`;
 const item=(t,tag)=>{const s=st(t),k=SK[s];return `<li class="it ${k}" data-id="${t.id}" style="border-left:6px solid ${cc(t)}"><span class="ic ${k}">${IC[s]}</span><div class="bd"><div class="tt" style="color:${cc(t)}">${esc(t.title)}</div><div class="mt">${fm(t)}${t.cat?'　'+esc(t.cat):''}</div></div>${tag?`<span class="tg">${tag}</span>`:''}</li>`};
-const box=(h,cls,list)=>`<section class="card"><h2 class="${cls}">${h}（${list.length}）</h2><ul>${list.map(t=>item(t)).join('')||'<li class="empty">目前沒有任務</li>'}</ul></section>`;
+const box=(h,cls,list,xs=[])=>`<section class="card"><h2 class="${cls}">${h}（${list.length+xs.length}）</h2><ul>${list.map(t=>item(t)).join('')+xs.map(xi).join('')||'<li class="empty">目前沒有任務</li>'}</ul></section>`;
 function banner(){const u=tasks.filter(t=>!fin(t)),a=u.filter(t=>t.due===TODAY).length,b=u.filter(rem).length,c=u.filter(over).length;
  $('#banner').innerHTML=(a+b+c)?`<div class="banner">⏰ 今日到期 ${a}｜提醒中 ${b}｜超期 ${c}</div>`:''}
 function vToday(){const act=d=>tasks.filter(t=>t.start<=d&&t.due>=d),n=add(TODAY,1),A=tasks.filter(t=>over(t)||rem(t));
  const U=S.hol?Object.keys(HOL).filter(d=>d>TODAY).slice(0,3):[],hb=S.hol?`<div class="hbox">${HOL[TODAY]?`🎌 今天是 <b>${HOL[TODAY]}</b>（放假）<br>`:''}近期假日：${U.map(d=>`${md(d)} ${HOL[d]}`).join('、')||'—'}</div>`:'';
- return hb+statBar()+box('今日待辦','',act(TODAY))+box('明日任務','tm',act(n))+box('超期／提醒','od',A)+(tasks.length?'':'<p class="note">還沒有任務，按右下角「＋」新增。</p>')}
+ return hb+statBar()+box('今日待辦','',act(TODAY),xe(TODAY))+box('明日任務','tm',act(n),xe(n))+box('超期／提醒','od',A)+(tasks.length?'':'<p class="note">還沒有任務，按右下角「＋」新增。</p>')}
 function vWeek(){const b=new Date();b.setDate(b.getDate()-((b.getDay()+6)%7)+7*wk);const s=ds(b),e=add(s,6);
  let h=`<div class="nav"><button data-w="-1">◀</button><b>${md(s)} – ${md(e)}${wk===0?'（本週）':''}</b><button data-w="1">▶</button><button data-w="0">本週</button></div>`;
  for(let i=0;i<7;i++){const d=add(s,i),L=tasks.filter(t=>t.start<=d&&t.due>=d);
-  h+=`<section class="card"><h2 class="${d===TODAY?'td':''}">週${WD[i]}　${md(d)}${d===TODAY?'（今天）':''}${hol(d)?`<span class="hn2">🎌${hol(d)}</span>`:''}</h2><ul>${L.map(t=>item(t,t.start===d&&t.due===d?'當日':t.start===d?'開始':t.due===d?'截止':'')).join('')||'<li class="empty">無任務</li>'}</ul></section>`}
+  h+=`<section class="card"><h2 class="${d===TODAY?'td':''}">週${WD[i]}　${md(d)}${d===TODAY?'（今天）':''}${hol(d)?`<span class="hn2">🎌${hol(d)}</span>`:''}</h2><ul>${(L.map(t=>item(t,t.start===d&&t.due===d?'當日':t.start===d?'開始':t.due===d?'截止':'')).join('')+xe(d).map(xi).join(''))||'<li class="empty">無任務</li>'}</ul></section>`}
  return h}
 function vMonth(){const f=new Date(new Date().getFullYear(),new Date().getMonth()+mo,1),y=f.getFullYear(),m=f.getMonth(),g=new Date(f);g.setDate(1-((f.getDay()+6)%7));
  let h=`<div class="nav"><button data-m="-1">◀</button><b>${y} 年 ${m+1} 月</b><button data-m="1">▶</button><button data-m="0">本月</button></div><div class="cal">`+WD.map(d=>`<div class="wd">${d}</div>`).join('');
  for(let i=0;i<42;i++){const d=ds(g),inM=g.getMonth()===m,L=inM?tasks.filter(t=>t.start<=d&&t.due>=d&&t.prog!=='取消'):[];
-  h+=`<button data-d="${d}" class="${inM?'':'out'} ${d===TODAY?'today':''} ${d===sel?'sel':''} ${hol(d)?'hol':''}"><b>${g.getDate()}</b>${hol(d)?`<span class="hn">${hol(d)}</span>`:''}<span class="dots">${L.slice(0,3).map(t=>`<i style="color:${cc(t)}"></i>`).join('')}</span></button>`;g.setDate(g.getDate()+1)}
+  h+=`<button data-d="${d}" class="${inM?'':'out'} ${d===TODAY?'today':''} ${d===sel?'sel':''} ${hol(d)?'hol':''}"><b>${g.getDate()}</b>${hol(d)?`<span class="hn">${hol(d)}</span>`:''}<span class="dots">${L.slice(0,3).map(t=>`<i style="color:${cc(t)}"></i>`).join('')}${xe(d).slice(0,2).map(e=>`<i style="color:${e.col};opacity:.45"></i>`).join('')}</span></button>`;g.setDate(g.getDate()+1)}
  const L=tasks.filter(t=>t.start<=sel&&t.due>=sel);
- return h+`</div><section class="card"><h2>${md(sel)} 的任務（${L.length}）</h2><ul>${L.map(t=>item(t,t.start===sel&&t.due===sel?'當日':t.start===sel?'開始':t.due===sel?'截止':'')).join('')||'<li class="empty">這天沒有任務</li>'}</ul></section>`}
+ return h+`</div><section class="card"><h2>${md(sel)} 的任務（${L.length+xe(sel).length}）</h2><ul>${(L.map(t=>item(t,t.start===sel&&t.due===sel?'當日':t.start===sel?'開始':t.due===sel?'截止':'')).join('')+xe(sel).map(xi).join(''))||'<li class="empty">這天沒有任務</li>'}</ul></section>`}
 function vList(){const u=k=>[...new Set(tasks.map(t=>t[k]).filter(Boolean))].sort(),op=(a,v,n)=>`<option value="">${n}：全部</option>`+a.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
  const L=tasks.filter(FL[flt][1]).filter(t=>(!fc||t.cat===fc)&&(!fd||t.folder===fd)&&(!qq||[t.title,t.contact,t.note,t.cat,t.folder].join(' ').includes(qq))).sort((a,b)=>edt(a)-edt(b));
  return statBar()+`<div class="sg2"><select data-s="fc">${op(u('cat'),fc,'分類')}</select><select data-s="fd">${op(u('folder'),fd,'資料夾')}</select><button data-f="all">清除</button></div><input id="qq" placeholder="搜尋標題、聯繫人、內容" value="${esc(qq)}" style="margin-bottom:10px">
@@ -191,8 +206,8 @@ $('#fP').innerHTML=[...Array(11)].map((_,i)=>`<option value="${i/10}">${i===10?'
 const paintCol=()=>document.querySelectorAll('#cp button').forEach(b=>b.classList.toggle('on',b.dataset.col===curCol));
 $('#cp').innerHTML=Object.entries(COL).map(([k,v])=>`<button type="button" data-col="${k}" aria-label="${v[0]}" style="background:${v[1]}"></button>`).join('');
 function toast(m){const e=$('#toast');e.textContent=m;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',3500)}
-function open_(id,day){editId=id;const t=tasks.find(x=>x.id===id)||{title:'',start:day||TODAY,due:day||TODAY,sT:'',eT:'',imp:2,advN:0,advU:'天',prog:0,note:'',cat:'',folder:'',contact:'',col:'gray'};
- $('#dh').textContent=id?'編輯任務':'新增任務';$('#fT').value=t.title;$('#fS').value=t.start;$('#fD').value=t.due;$('#fST').value=t.sT;$('#fDT').value=t.eT;$('#fI').value=t.imp;$('#fAN').value=t.advN;$('#fAU').value=t.advU;$('#fP').value=t.prog;$('#fN').value=t.note;
+function open_(id,day,pre){editId=id;const t=tasks.find(x=>x.id===id)||{title:'',start:day||TODAY,due:day||TODAY,sT:'',eT:'',imp:2,advN:0,advU:'天',prog:0,note:'',cat:'',folder:'',contact:'',col:'gray',...pre};
+ $('#dh').textContent=id?'編輯任務':pre?'轉為待辦任務':'新增任務';$('#fT').value=t.title;$('#fS').value=t.start;$('#fD').value=t.due;$('#fST').value=t.sT;$('#fDT').value=t.eT;$('#fI').value=t.imp;$('#fAN').value=t.advN;$('#fAU').value=t.advU;$('#fP').value=t.prog;$('#fN').value=t.note;
  $('#fCat').value=t.cat;$('#fFol').value=t.folder;$('#fCon').value=t.contact;curCol=t.col;paintCol();
  for(const [d,k] of [['dl1','cat'],['dl2','folder']])$('#'+d).innerHTML=[...new Set(tasks.map(x=>x[k]).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('');
  $('#del').style.display=id?'':'none';hint();$('#dlg').showModal()}
@@ -212,7 +227,9 @@ $('#cc').onclick=()=>$('#dlg').close();
 $('#del').onclick=()=>{sync('del',{id:editId});tasks=tasks.filter(x=>x.id!==editId);save();$('#dlg').close();render()};
 $('#add').onclick=()=>open_(null,view==='month'?sel:null);
 $('#set').onclick=openSet;//()=>{const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;r.dataset.theme=dark?'light':'dark'};
+const openX=id=>{const e=EXT.find(z=>z.id===id);if(e)open_(null,null,{title:e.title,start:e.start,due:e.due,sT:e.sT,eT:e.eT,note:[e.loc&&'地點：'+e.loc,(e.note||'').slice(0,500)].filter(Boolean).join('\n'),folder:e.cn})};
 document.addEventListener('click',e=>{const t=e.target,Q=z=>t.closest(z);let x;
+ if(x=Q('[data-x]'))return openX(x.dataset.x);
  if(x=Q('[data-cal]'))return addCal(x.dataset.cal);
  if(x=Q('[data-v]')){view=x.dataset.v;scrollTo(0,0);return render()}
  if(x=Q('[data-f]')){if(x.dataset.f==='all'){flt='all';fc=fd=qq=''}else flt=x.dataset.f;view='list';scrollTo(0,0);return render()}
@@ -223,6 +240,7 @@ document.addEventListener('click',e=>{const t=e.target,Q=z=>t.closest(z);let x;
  if(x=Q('[data-id]'))open_(x.dataset.id)});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.s){t.dataset.s==='fc'?fc=t.value:fd=t.value;render()}else if(t.id==='qq'){qq=t.value.trim();render()}});
 render();
+if(S.url&&Date.now()-S.last>6e5)pull(false);
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 </script>
 </body>
